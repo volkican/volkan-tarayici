@@ -366,7 +366,38 @@ public final class MainActivity extends Activity {
     }
 
     private Config parseVpnConfig(String raw) throws Exception {
-        return Config.parse(new ByteArrayInputStream(raw.getBytes(StandardCharsets.UTF_8)));
+        StringBuilder repaired = new StringBuilder();
+        String normalized = raw.replace("\r\n", "\n").replace('\r', '\n');
+        for (String originalLine : normalized.split("\n")) {
+            String line = originalLine;
+            int equals = line.indexOf('=');
+            if (equals > 0) {
+                String field = line.substring(0, equals).trim();
+                if (field.equalsIgnoreCase("PrivateKey")
+                        || field.equalsIgnoreCase("PublicKey")
+                        || field.equalsIgnoreCase("PresharedKey")) {
+                    String value = line.substring(equals + 1)
+                            .replaceAll("\\s+", "")
+                            .replace('-', '+')
+                            .replace('_', '/');
+                    while (value.length() % 4 != 0) {
+                        value += "=";
+                    }
+                    try {
+                        byte[] decoded = java.util.Base64.getDecoder().decode(value);
+                        if (decoded.length == 32) {
+                            value = java.util.Base64.getEncoder().encodeToString(decoded);
+                            line = line.substring(0, equals + 1) + " " + value;
+                        }
+                    } catch (IllegalArgumentException ignored) {
+                        // Config.parse asil ayrintili hatayi gosterecek.
+                    }
+                }
+            }
+            repaired.append(line).append('\n');
+        }
+        return Config.parse(new ByteArrayInputStream(
+                repaired.toString().getBytes(StandardCharsets.UTF_8)));
     }
 
     private String restrictToThisBrowser(String raw) {
