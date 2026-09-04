@@ -19,16 +19,75 @@ jobs:
       - name: Depoyu al
         uses: actions/checkout@v4
 
-      - name: Android 16 uyumlulugunu ayarla
+      - name: Proton VPN uyumlulugunu duzelt
         shell: bash
         run: |
           sed -i "s/geckoview:155.0.20260903215306/geckoview:153.0.20260810162159/" app/build.gradle
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("app/src/main/java/com/volkan/volkantarayici/MainActivity.java")
+          text = path.read_text(encoding="utf-8")
+
+          old = '''    private Config parseVpnConfig(String raw) throws Exception {
+                  return Config.parse(new ByteArrayInputStream(raw.getBytes(StandardCharsets.UTF_8)));
+              }
+          '''
+
+          new = r'''    private Config parseVpnConfig(String raw) throws Exception {
+                  StringBuilder repaired = new StringBuilder();
+                  String normalized = raw.replace("\r\n", "\n").replace('\r', '\n');
+                  for (String originalLine : normalized.split("\n")) {
+                      String line = originalLine;
+                      int equals = line.indexOf('=');
+                      if (equals > 0) {
+                          String field = line.substring(0, equals).trim();
+                          if (field.equalsIgnoreCase("PrivateKey")
+                                  || field.equalsIgnoreCase("PublicKey")
+                                  || field.equalsIgnoreCase("PresharedKey")) {
+                              String value = line.substring(equals + 1)
+                                      .replaceAll("\\s+", "")
+                                      .replace('-', '+')
+                                      .replace('_', '/');
+                              while (value.length() % 4 != 0) {
+                                  value += "=";
+                              }
+                              try {
+                                  byte[] decoded = java.util.Base64.getDecoder().decode(value);
+                                  if (decoded.length == 32) {
+                                      value = java.util.Base64.getEncoder().encodeToString(decoded);
+                                      line = line.substring(0, equals + 1) + " " + value;
+                                  }
+                              } catch (IllegalArgumentException ignored) {
+                                  // Config.parse asil ayrintili hatayi gosterecek.
+                              }
+                          }
+                      }
+                      repaired.append(line).append('\n');
+                  }
+                  return Config.parse(new ByteArrayInputStream(
+                          repaired.toString().getBytes(StandardCharsets.UTF_8)));
+              }
+          '''
+
+          if old in text:
+              text = text.replace(old, new)
+              path.write_text(text, encoding="utf-8")
+          elif "java.util.Base64.getDecoder()" not in text:
+              raise SystemExit("VPN duzeltme noktasi bulunamadi")
+          PY
+
           grep -q "geckoview:153.0.20260810162159" app/build.gradle
+          grep -q "java.util.Base64.getDecoder()" app/src/main/java/com/volkan/volkantarayici/MainActivity.java
+
           git config user.name "Volkan Tarayici Derleme"
           git config user.email "actions@users.noreply.github.com"
-          git add app/build.gradle
-          git commit -m "GeckoView Android 16 uyumlulugunu duzelt" || true
-          git push
+          git add app/build.gradle app/src/main/java/com/volkan/volkantarayici/MainActivity.java
+          if ! git diff --cached --quiet; then
+            git commit -m "Proton VPN uyumlulugunu duzelt"
+            git push
+          fi
 
       - name: Java 17 kur
         uses: actions/setup-java@v4
@@ -47,13 +106,13 @@ jobs:
       - name: Android 16 bilesenlerini kur
         run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
 
-      - name: Test APK'sini olustur
+      - name: Yeni APK'yi olustur
         run: gradle :app:assembleDebug --stacktrace
 
       - name: APK'yi indirilebilir yap
         uses: actions/upload-artifact@v4
         with:
-          name: VolkanTarayici-test
+          name: VolkanTarayici-VPN-duzeltildi
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 30
