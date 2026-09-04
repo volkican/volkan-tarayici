@@ -1,0 +1,3 @@
+-keep class org.mozilla.geckoview.** { *; }
+-keep class com.wireguard.** { *; }
+-dontwarn org.mozilla.geckoview.**
