@@ -253,10 +253,9 @@ jobs:
           mkdir -p /tmp/volkan-kaynak
           unzip -q /tmp/volkan-tarayici.zip -d /tmp/volkan-kaynak
           cp -a /tmp/volkan-kaynak/VolkanTarayici/. .
-          git rm --ignore-unmatch .github/workflows/ilk-kurulum.yml
           git config user.name "Volkan Tarayici Kurulum"
           git config user.email "actions@users.noreply.github.com"
-          git add .
+          git add README.md .gitignore app build.gradle gradle.properties settings.gradle
           git commit -m "Volkan Tarayici ilk surumunu kur" || true
           git push
 
